@@ -208,3 +208,17 @@ def str2m(string: str):
 
 inp = st.text_area(label="input", )
 result = st.markdown(str(solve(str2m(inp))) + "\n--" if inp else "")
+
+st.markdown("""tips:  
+1.使用说明：+加 -减 *乘 ^幂 暂不支持除法，~~绝对不是懒得做~~。式子中请不要出现空格。幂只能用在字母上，~~因为我只做了这个。~~  
+例子:
+```
+a b c
+d e f
+g h i
+```
+```
+5*a 6*a*a
+7b^4 64*12*c
+```
+2.[项目地址](https://github.com/jiguancheng/determinant_calculating)，纯Python制作，闲的没事可以来帮我改改代码，~~因为我写的太烂了。~~""")
