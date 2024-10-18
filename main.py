@@ -1,5 +1,5 @@
 import streamlit as st
-from typing import Dict, List
+from typing import List, Dict
 
 alphas = "abcdefghijklmnopqrstuvwxyz"
 
@@ -50,6 +50,8 @@ class Expression:
 
     @classmethod
     def simple_str(cls, string):
+        if string == "":
+            return Expression([Term(1, {alphas[_]: 0 for _ in range(26)})])
         term = Expression([Term(1, {alphas[_]: 0 for _ in range(26)})])
         for little in string.split("*"):
             neg = -1 if little[0] == "-" else 1
@@ -76,10 +78,10 @@ class Expression:
     def till_num(cls, string: str) -> (float | int, str):
         if not string:
             return 1, ""
-        if string[0] not in "0123456789.":
+        if string[0] not in "-0123456789.":
             return 1, string
         for i in range(len(string)):
-            if string[i] not in "0123456789.":
+            if string[i] not in "-0123456789.":
                 return float(string[:i]) if "." in string[:i] else int(string[:i]), string[i:]
         return float(string) if "." in string else int(string), ""
 
@@ -88,21 +90,24 @@ class Expression:
         # 格式要求: +-加减*乘^幂 (*可省略) 5ab-8a^56de^4+()^
         # No.1 括号外拆项 (以括号外正负号分割)
         string = string.replace(" ", "")
+        string = string.lstrip("+")
         depth = 0
         dots, parts = [0], []
-        for j, i in enumerate(string):
+        neg = True if string[0] == "-" else False
+        s = " " + string[1:] if neg else string
+        for j, i in enumerate(s):
             if i == "(":
                 depth += 1
             elif i == ")":
                 depth -= 1
                 assert depth >= 0
-            elif i in "+-" and depth == 0:
+            elif i in "+-" and depth == 0 and (i == "+" or (j != 0 and s[j - 1] != "^")):
                 dots.append(j)
         dots.append(len(string))
         for i in range(len(dots) - 1):
             parts.append(string[dots[i]:dots[i + 1]])
-        # 首项添加加号
-        if parts[0][0] != "-":
+        # 首项添加符号
+        if parts[0] and parts[0][0] != "-":
             parts[0] = "+" + parts[0]
 
         # No.2 计算简单项(无括号,无需再次计算)
@@ -189,7 +194,6 @@ def solve(m):
     s = Expression([])
     for i in range(n):
         temp = [m[j][:i] + m[j][i + 1:] for j in range(1, n)]
-        print(temp)
         if i % 2 == 1:
             s -= solve(temp) * m[0][i]
         else:
