@@ -202,7 +202,7 @@ def solve(m):
 
 
 def str2m(string: str):
-    l = list(map(lambda x: list(map(lambda y: Expression.from_str(y), x.split())), string.split("\n")))
+    l = list(map(lambda x: list(map(lambda y: Expression.from_str(y), x.split())), filter(lambda x: x, string.split("\n"))))
     return l
 
 
