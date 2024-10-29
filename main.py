@@ -1,32 +1,36 @@
+from typing import List, Dict, Union, Literal
 import streamlit as st
-from typing import List, Dict
 
-alphas = "abcdefghijklmnopqrstuvwxyz"
+alphas = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 class Term:
-    def __init__(self, coefficient: float | int, variables: Dict[str, int]):
-        self.coefficient = coefficient
-        self.variables = variables
+    def __init__(self, coefficient: Union[int, float], variables=None):
+        if variables is None:
+            variables = {}
+        self.coefficient: Union[int, float] = coefficient
+        self.variables: Dict[str, int] = {i: 0 for i in alphas}
+        self.variables.update(variables)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not any(self.variables.values()):
             return ("+" if self.coefficient >= 0 else "") + str(self.coefficient)
         return f"{'+' if self.coefficient > 0 else ''}{'-' if self.coefficient == -1 else self.coefficient if self.coefficient != 1 else ''}{''.join(map(lambda x: f'{x[0]}^' + '{' + f'{x[1]}' + '}' if x[1] != 1 else str(x[0]), sorted(filter(lambda x: x[1] != 0, self.variables.items()))))}"
 
-    def __eq__(self, other):
+    def __eq__(self, other: Union[int, float, "Term"]) -> bool:
         if other == 0:
             return self.coefficient == 0
         if isinstance(other, (int, float)):
             return False if self.coefficient != other or any(self.variables.values()) else True
         if isinstance(other, Term):
-            return True if self.coefficient == other.coefficient and self.variables == other.variables else False
+            return True if self.coefficient == other.coefficient and self.variables == other.variables \
+                else False
         raise TypeError(f"{type(other)} 不能与 Term 比较")
 
-    def __neg__(self):
+    def __neg__(self) -> "Term":
         return Term(-self.coefficient, self.variables)
 
-    def __copy__(self):
+    def __copy__(self) -> "Term":
         return Term(self.coefficient, self.variables.copy())
 
 
@@ -35,24 +39,20 @@ class Expression:
         self.terms = terms
         self.clear()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not any(map(lambda x: x != 0, self.terms)):
-            return "$$0$$"
-        text = "".join(map(str, self.terms)).lstrip("+")
-        return f"$${text}$$"
+            return "0"
+        text = "".join(map(str, self.terms)).removeprefix("+")
+        return text
 
-    def clear(self):
+    def clear(self) -> None:
         self.terms = list(filter(lambda x: x != 0, self.terms))
-
-    @staticmethod
-    def lstrip(string, char):
-        return string if string[0] != char else string[1:]
 
     @classmethod
     def simple_str(cls, string):
         if string == "":
-            return Expression([Term(1, {alphas[_]: 0 for _ in range(26)})])
-        term = Expression([Term(1, {alphas[_]: 0 for _ in range(26)})])
+            return Expression([Term(1)])
+        term = Expression([Term(1)])
         for little in string.split("*"):
             neg = -1 if little[0] == "-" else 1
             if little[0] in "+-":
@@ -90,7 +90,7 @@ class Expression:
         # 格式要求: +-加减*乘^幂 (*可省略) 5ab-8a^56de^4+()^
         # No.1 括号外拆项 (以括号外正负号分割)
         string = string.replace(" ", "")
-        string = string.lstrip("+")
+        string = string.removeprefix("+")
         depth = 0
         dots, parts = [0], []
         neg = True if string[0] == "-" else False
@@ -146,8 +146,8 @@ class Expression:
         terms.clear()
         return terms
 
-    def __add__(self, other):
-        terms = Expression(self.terms.copy())
+    def __add__(self, other: Union[Term, "Expression", int, float]) -> "Expression":
+        terms = self.__copy__()
         if isinstance(other, Term):
             for i in terms.terms:
                 if i.variables == other.variables:
@@ -161,18 +161,26 @@ class Expression:
             for i in other.terms:
                 terms += i
             return terms
-        raise TypeError(f"{self} 不能与 {other} 运算")
+        if isinstance(other, Union[int, float]):
+            return self + Term(other)
+        raise TypeError(f"{type(self)}: {self} 不能与 {type(other)}: {other} 运算")
 
-    def __neg__(self):
+    def __radd__(self, other: Union[Term, "Expression"]) -> "Expression":
+        return self + other
+
+    def __neg__(self) -> "Expression":
         terms = list(map(lambda x: -x, self.terms.copy()))
         return Expression(terms)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Union[Term, "Expression"]) -> "Expression":
         return self + -other
 
-    def __mul__(self, other):
+    def __rsub__(self, other: Union[Term, "Expression"]) -> "Expression":
+        return -self + other
+
+    def __mul__(self, other: Union[Term, "Expression", int, float]) -> "Expression":
         if isinstance(other, Term):
-            terms = Expression([i.__copy__() for i in self.terms])
+            terms = self.__copy__()
             for i in terms.terms:
                 i.coefficient *= other.coefficient
                 for j in other.variables.items():
@@ -185,6 +193,101 @@ class Expression:
                 terms += other * i
             terms.clear()
             return terms
+        if isinstance(other, Union[int, float]):
+            terms = self.__copy__()
+            for i in terms.terms:
+                i.coefficient *= other
+            return terms
+
+    def __rmul__(self, other: Union[Term, "Expression", int, float]) -> "Expression":
+        return self * other
+
+    def __copy__(self) -> "Expression":
+        return Expression([i.__copy__() for i in self.terms])
+
+
+class Matrix:
+    def __init__(self, value: List[List[Expression]]):
+        self.value: List[List[Expression]] = value
+
+    @property
+    def width(self) -> int:
+        return len(self.value[0])
+
+    @property
+    def height(self) -> int:
+        return len(self.value)
+
+    def __repr__(self) -> str:
+        head = "\\begin{matrix}\n"
+        content = "\\\\\n".join(map(lambda x: "&".join(map(str, x)), self.value))
+        end = "\\\\\n\\end{matrix}"
+        return f"{head}{content}{end}"
+
+    def show(self, mode: Literal["p", "b", "B", "v", "V"] = "b") -> str:
+        """ "p"：小括号边框
+            "b"：中括号边框
+            "B"：大括号边框
+            "v"：单竖线边框
+            "V"：双竖线边框"""
+        return str(self).replace("matrix", f"{mode}matrix")
+
+    def __add__(self, other: "Matrix") -> "Matrix":
+        assert self.width == other.width and self.height == other.height, "相加矩阵大小不相等"
+        temp = []
+        for i in range(self.height):
+            temp.append([self.value[i][j] + other.value[i][j] for j in range(self.width)])
+        return Matrix(temp)
+
+    def __neg__(self):
+        temp = []
+        for i in self.value:
+            temp.append([])
+            for j in i:
+                temp[-1].append(-j)
+        return Matrix(temp)
+
+    def __sub__(self, other: "Matrix") -> "Matrix":
+        return self + -other
+
+    def __mul__(self, other: Union[int, float, Term, Expression, "Matrix"]) -> "Matrix":
+        if isinstance(other, (int, float, Term, Expression)):
+            temp = []
+            for i in self.value:
+                temp.append([])
+                for j in i:
+                    temp[-1].append(j * other)
+            return Matrix(temp)
+        if isinstance(other, Matrix):
+            assert self.width == other.height, f"无法相乘{self.show()}, {other.show()}"
+            temp = []
+            for i in range(self.height):
+                temp.append([sum(map(Expression.__mul__, self.value[i], map(lambda x: x[j], other.value))) for j in
+                             range(other.width)])
+            return Matrix(temp)
+
+    def __copy__(self) -> "Matrix":
+        temp = []
+        for i in self.value:
+            temp.append([])
+            for j in i:
+                temp[-1].append(j.__copy__())
+        return Matrix(temp)
+
+    def __pow__(self, power, modulo=None):
+        assert self.width == self.height, "矩阵不是方阵"
+        temp = self.__copy__()
+        result = Matrix([[Expression([Term(0)])]*i+[Expression([Term(1)])]+[Expression([Term(0)])]*(self.height-i-1) for i in range(self.height)])
+        for i in bin(power)[2:][::-1]:
+            if i == "1":
+                result = temp*result
+            temp *= temp
+        return result
+
+
+    def determinant(self) -> Expression:
+        assert self.width == self.height, f"该矩阵 ({self.width}x{self.height}) 无法计算行列式"
+        return solve(self.value)
 
 
 def solve(m):
@@ -201,24 +304,93 @@ def solve(m):
     return s
 
 
-def str2m(string: str):
-    l = list(map(lambda x: list(map(lambda y: Expression.from_str(y), x.split())), filter(lambda x: x, string.split("\n"))))
-    return l
+def str2m(string: str) -> Matrix:
+    l = list(
+        map(lambda x: list(map(lambda y: Expression.from_str(y), x.split())), filter(lambda x: x, string.split("\n"))))
+    return Matrix(l)
 
 
-inp = st.text_area(label="input", )
-result = st.markdown(str(solve(str2m(inp))) + "\n--" if inp else "")
+inp1 = st.text_area(label="矩阵A")
+inp2 = st.text_area(label="矩阵B")
+option = st.selectbox("运算", ["行列式", "+", "-", "X", "^"])
+match option:
+    case "行列式":
+        for i in [inp1.strip(), inp2.strip()]:
+            if not i:
+                continue
+            m = str2m(i)
+            st.markdown(f"$$\n{m.show('v')}=\n$$")
+            st.markdown(f"$${m.determinant()}$$")
+    case "+" | "-":
+        a, b = str2m(inp1.strip()), str2m(inp2.strip())
+        if inp1.strip() and inp2.strip():
+            try:
+                c = a + b if option == "+" else a - b
+                st.markdown(f"$$\n{a.show()}{option}{b.show()}={c.show()}\n$$")
+                st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
+            except AssertionError as e:
+                st.error(e)
+    case "X":
+        if inp1.strip() and inp2.strip():
+            a, b = str2m(inp1.strip()), str2m(inp2.strip())
+            try:
+                c = a*b
+                st.markdown(f"$$\n{a.show()}{b.show()}={c.show()}\n$$")
+                st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
+            except AssertionError as e:
+                st.error(e)
+            try:
+                d = b*a
+                st.markdown(f"$$\n{b.show()}{a.show()}={d.show()}\n$$")
+                st.markdown(f"##### 计算行列式: $$ {d.determinant()}$$")
+            except AssertionError as e:
+                st.error(e)
 
-st.markdown("""tips:  
-1.使用说明：+加 -减 *乘 ^幂 暂不支持除法，~~绝对不是懒得做~~。式子中请不要出现空格。幂只能用在字母上，~~因为我只做了这个。~~  
-例子:
+    case "^":
+        if inp1.strip() and inp2.strip():
+            a, b = str2m(inp1.strip()), int(inp2)
+            try:
+                c = a**b
+                st.markdown(f"$$\n{a.show()}^"+"{"+ f"{b}"+"}"+f"={c.show()}\n$$")
+                st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
+            except AssertionError as e:
+                st.error(e)
+
+
+st.markdown(r"""使用说明
+--
+- 计算器支持行列式、矩阵加、减、乘、幂运算，支持部分包含字母的表达式
+- 输入矩阵时请用空格将表达式分开，输入为以下形式：
 ```
-a b c
-d e f
-g h i
+a b c  
+d e f  
+g h i  
 ```
+表示矩阵
+$$
+\begin{bmatrix}
+a&b&c\\
+d&e&f\\
+g&h&i\\
+\end{bmatrix}
+$$
+- 表达式结构为 **系数+未知量**（允许包含括号嵌套）
+- 系数为任意实数
+- 未知量为字母+^+幂（可选）
+- 例：
 ```
-5*a 6*a*a
-7b^4 64*12*c
+3aa
+5b^-5
+34jgc
+-114.514ab^67c
+78(12a)(34a+b)
 ```
-2.[项目地址](https://github.com/jiguancheng/determinant_calculating)，纯Python制作，闲的没事可以来帮我改改代码，~~因为我写的太烂了。~~""")
+其值依次为：  
+$$3a^{2}$$  
+$$5b^{-5}$$  
+$$34cgj$$  
+$$-114514.ab^{67}c$$  
+$$31824a^{2}+936ab$$  
+- 加减均为 上$\pm$下
+- 纯python项目，作者写的很烂，如有bug欢迎在github上提issue
+- ~~或者帮我改代码~~""")
