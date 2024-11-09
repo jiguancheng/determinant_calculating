@@ -276,21 +276,44 @@ class Matrix:
 
     def __pow__(self, power, modulo=None):
         assert self.width == self.height, "矩阵不是方阵"
+        if power == -1:
+            temp = []
+            determinant = self.determinant()
+            assert determinant != 0, "矩阵不存在逆矩阵"
+            for i in range(self.width):
+                temp.append([])
+                for j in range(self.height):
+                    temp[-1].append(self.remainder(i, j))
+            return determinant, Matrix(temp)
         temp = self.__copy__()
-        result = Matrix([[Expression([Term(0)])]*i+[Expression([Term(1)])]+[Expression([Term(0)])]*(self.height-i-1) for i in range(self.height)])
+        result = Matrix(
+            [[Expression([Term(0)])] * i + [Expression([Term(1)])] + [Expression([Term(0)])] * (self.height - i - 1) for
+             i in range(self.height)])
         for i in bin(power)[2:][::-1]:
             if i == "1":
-                result = temp*result
+                result = temp * result
             temp *= temp
         return result
 
+    def remainder(self, row: int, column: int):
+        assert 0 <= row < self.width and 0 <= column < self.height, "Error get remainder"
+        temp = [i[:row] + i[row + 1:] for i in (self.value[:column] + self.value[column + 1:])]
+        return solve(temp) * (-1 if (row + column) % 2 else 1)
 
     def determinant(self) -> Expression:
         assert self.width == self.height, f"该矩阵 ({self.width}x{self.height}) 无法计算行列式"
         return solve(self.value)
 
+    def transpose(self) -> "Matrix":
+        temp = []
+        for i in range(self.width):
+            temp.append([])
+            for j in range(self.height):
+                temp[-1].append(self.value[j][i].__copy__())
+        return Matrix(temp)
 
-def solve(m):
+
+def solve(m: List[List[Expression]]) -> Expression:
     n = len(m)
     if n == 1:
         return m[0][0]
@@ -334,13 +357,13 @@ match option:
         if inp1.strip() and inp2.strip():
             a, b = str2m(inp1.strip()), str2m(inp2.strip())
             try:
-                c = a*b
+                c = a * b
                 st.markdown(f"$$\n{a.show()}{b.show()}={c.show()}\n$$")
                 st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
             except AssertionError as e:
                 st.error(e)
             try:
-                d = b*a
+                d = b * a
                 st.markdown(f"$$\n{b.show()}{a.show()}={d.show()}\n$$")
                 st.markdown(f"##### 计算行列式: $$ {d.determinant()}$$")
             except AssertionError as e:
@@ -350,12 +373,16 @@ match option:
         if inp1.strip() and inp2.strip():
             a, b = str2m(inp1.strip()), int(inp2)
             try:
-                c = a**b
-                st.markdown(f"$$\n{a.show()}^"+"{"+ f"{b}"+"}"+f"={c.show()}\n$$")
-                st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
+                if b == -1:
+                    c, d = a ** -1
+                    st.markdown(f"$$\n{a.show("v")}={c}\n$$")
+                    st.markdown(f"$$\n{a.show()}^" + "{*}=" + f"{d.show()}\n$$")
+                else:
+                    c = a ** b
+                    st.markdown(f"$$\n{a.show()}^" + "{" + f"{b}" + "}" + f"={c.show()}\n$$")
+                    st.markdown(f"##### 计算行列式: $${c.determinant()}$$")
             except AssertionError as e:
                 st.error(e)
-
 
 st.markdown(r"""使用说明
 --
@@ -393,4 +420,5 @@ $$-114514.ab^{67}c$$
 $$31824a^{2}+936ab$$  
 - 加减均为 上$\pm$下
 - 纯python项目，作者写的很烂，如有bug欢迎在github上提issue
-- ~~或者帮我改代码~~""")
+- ~~或者帮我改代码~~
+- [项目地址(github)](https://github.com/jiguancheng/determinant_calculating/)""")
